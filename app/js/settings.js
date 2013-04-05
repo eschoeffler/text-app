@@ -44,7 +44,9 @@ Settings.prototype.getAll = function() {
 
 Settings.prototype.set = function(key, value) {
   this.settings_[key] = value;
-  this.onChanged_({key: value});
+  var changes = {};
+  changes[key] = value;
+  this.onChanged_(changes);
 };
 
 Settings.prototype.isReady = function() {
@@ -63,7 +65,7 @@ Settings.prototype.getSettingsCallback_ = function(settings) {
 
 Settings.prototype.onChanged_ = function(changes) {
   for (var key in changes) {
-    var value = changes[key].newValue;
+    var value = changes[key];
     console.log('Settings changed:', key, value);
     $.event.trigger('settingschange', [key, value]);
   }
