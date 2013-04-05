@@ -32,9 +32,8 @@ TextDrive.prototype.init = function() {
   this.searchController_ = new SearchController(this.editor_);
   this.settingsController_ = new SettingsController(this.settings_);
   this.windowController_ = new WindowController(this.editor_);
-
-  chrome.runtime.getBackgroundPage(function(bg) {
-    bg.background.onWindowReady(this);
+  $(document).ready(function() {
+    this.openNew();
   }.bind(this));
 };
 

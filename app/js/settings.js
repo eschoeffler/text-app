@@ -4,15 +4,9 @@
 function Settings() {
   this.ready_ = false;
   this.settings_ = {};
-  var storageKeys = {};
   for (var key in Settings.SETTINGS) {
     this.settings_[key] = Settings.SETTINGS[key]['default'];
-    storageKeys['settings-' + key] = this.settings_[key];
   }
-  // Can be changed to chrome.storage.local.
-  this.storage_ = chrome.storage[Settings.AREA];
-  chrome.storage.onChanged.addListener(this.onChanged_.bind(this));
-  this.storage_.get(storageKeys, this.getSettingsCallback_.bind(this));
 }
 
 /**
@@ -49,11 +43,8 @@ Settings.prototype.getAll = function() {
 };
 
 Settings.prototype.set = function(key, value) {
-  var item = {};
-  item['settings-' + key] = value;
-  this.storage_.set(item);
-  // this.settings_ will be updated in onChanged_ to keep them in sync with
-  // storage.
+  this.settings_[key] = value;
+  this.onChanged_({key: value});
 };
 
 Settings.prototype.isReady = function() {
@@ -70,19 +61,10 @@ Settings.prototype.getSettingsCallback_ = function(settings) {
   $.event.trigger('settingsready');
 };
 
-Settings.prototype.onChanged_ = function(changes, areaName) {
-  if (areaName !== Settings.AREA) {
-    console.warn('Storage change in wrong area. Maybe a bug?');
-    return;
-  }
-
+Settings.prototype.onChanged_ = function(changes) {
   for (var key in changes) {
-    if (key.indexOf('settings-') !== 0)
-      continue;
     var value = changes[key].newValue;
-    key = key.substring(9);
     console.log('Settings changed:', key, value);
-    this.settings_[key] = value;
     $.event.trigger('settingschange', [key, value]);
   }
 };
