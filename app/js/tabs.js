@@ -279,6 +279,8 @@ Tabs.prototype.save = function(opt_tab, opt_close) {
 Tabs.prototype.saveAs = function(opt_tab, opt_close) {
   if (!opt_tab)
     opt_tab = this.currentTab_;
+  // TODO(eschoeffler): do a better prompt
+  var name = window.prompt('Enter a name for this file');
   Tabs.chooseEntry(
       {'type': 'saveFile'},
       this.onSaveAsFileOpen_.bind(this, opt_tab, opt_close || false));

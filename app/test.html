@@ -1,0 +1,156 @@
+
+<script type="text/javascript" src="https://apis.google.com/js/api.js"></script>
+<script src="lib/jquery-1.8.3.min.js" type="text/javascript"></script>
+<script src="js/util.js" type="text/javascript"></script>
+<script src="js/drive_api.js" type="text/javascript"></script>
+
+<style>
+.listOut {
+  height: 200px;
+  overflow: auto;
+}
+.listDiv {
+  border-bottom: 1px solid black;
+  padding: 3px;
+  cursor: pointer;
+}
+.getOut {
+  height: 200px;
+  overflow: auto;
+  white-space: pre;
+}
+.content {
+  width: 100%;
+  height: 200px;
+}
+</style>
+<div id='loading'>
+Loading...
+</div>
+<div id='authDialog' style='display:none'>
+  Authorization Required
+  <button id='authOkay'>Okay</button>
+</div>
+<div id='mainBody' style='display:none'>
+  <button id='list'>List</button>
+  <div id='listOut' class='listOut'></div>
+  <div>Id:
+      <input id='getId'/>
+      <button id='get'>Get</button>
+      Title:
+      <input id='title'/>
+      <button id='save'>Save</button>
+      <button id='delete'>Delete</button></div>
+  <div id='getOut' class='getOut'></div>
+  <textarea id='content' class='content'></textarea>
+</div>
+
+<script>
+requiresPopup = function(e) {
+  $('#loading').css('display', 'none');
+  $('#authDialog').css('display', 'block');
+  $('#authOkay').on('click', api.authorize.bind(api, true));
+};
+authed = function(e) {
+  $('#loading').css('display', 'none');
+  $('#authDialog').css('display', 'none');
+  $('#mainBody').css('display', 'block');
+  $('#list').trigger('click');
+  var id = $.history.param('f');
+  if (id) {
+    $('#getId').val(id);
+    $('#get').trigger('click');
+  }
+};
+userId = function(e, userId) {
+  $.history.param('u', userId);
+};
+error = function(e, code, message) {
+  alert(code + ': ' + message);
+};
+var api = new drive.Api(
+    '511145861127.apps.googleusercontent.com', // TextDrive
+    ['https://www.googleapis.com/auth/drive.file'],
+    $.history.param('u'));
+api.on('requirespopup', requiresPopup);
+api.on('authed', authed);
+api.on('userId', userId);
+api.on('error', error);
+api.start();
+
+var displayedFile = null;
+updateFile = function(file, ignoreContent) {
+  displayedFile = file;
+  var content = file['content'];
+  delete file['content'];
+  if (file == null) {
+		$('#getId').val('');
+    $.history.param('f', null);
+		$('#title').val('');
+		$('#getOut').text('');
+		$('#content').val('');
+  } else {
+		$('#getId').val(file['id']);
+    $.history.param('f', file['id']);
+		$('#title').val(file['title']);
+		$('#getOut').text(JSON.stringify(file, null, '\t'));
+		if (!ignoreContent) {
+			$('#content').val(content);
+		}
+  }
+}
+
+initUi = function() {
+  $('#list').on('click', function() {
+    api.list(function(files) {
+      var out = $('#listOut');
+      out.empty();
+      $.each(files.items, function(index, file) {
+        var div = $(document.createElement('div'));
+        div.addClass('listDiv');
+        div.text(file['title']);
+        div.on('click', function() {
+          $('#getId').val(file['id']);
+          $('#get').trigger('click');
+        });
+        out.append(div);
+      });
+    });
+  });
+  
+  $('#get').on('click', function() {
+    var id = $('#getId').val();
+    api.get(id, function(file) {
+      updateFile(file);
+    }, true /* getContent */);
+  });
+
+  $('#delete').on('click', function() {
+    var id = $('#getId').val();
+    api.delete(id, function() {
+      updateFile(null);
+    });
+  });
+
+  $('#save').on('click', function() {
+    var id = $('#getId').val();
+    var content = $('#content').val();
+    var title = $('#title').val();
+    displayedFile['title'] = title;
+    if (id) {
+      api.update(function(file) {
+          updateFile(file, true);
+        },
+        displayedFile,
+        content);
+    } else {
+      api.insert(function(file) {
+          updateFile(file, true);
+        },
+        title,
+        'text/plain',
+        content);
+    }
+  });
+}();
+</script>
