@@ -151,12 +151,11 @@ drive.Api.prototype.createRequest_ =
   return gapi.client.request(requestData);
 };
 
-drive.Api.prototype.insert =
-    function(callback, title, mimeType, opt_content, opt_base64Encoded) {
-  var metadata = {
-    title: title,
-    mimeType: mimeType
-  }
+drive.Api.prototype.insert = function(callback,
+        title, mimeType, opt_content, opt_base64Encoded, opt_otherMetadata) {
+  var metadata = $.extend({}, opt_otherMetadata || {});
+  metadata['title'] = title;
+  metadata['mimeType'] = mimeType;
   var requestData = {
     'path': '/drive/v2/files',
     'method': 'POST'

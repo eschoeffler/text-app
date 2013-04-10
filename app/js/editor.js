@@ -19,7 +19,7 @@ function Editor(elementId, settings) {
   $(document).bind('settingschange', this.onSettingsChanged_.bind(this));
   $(document).bind('tabrenamed', this.onTabRenamed_.bind(this));
   if (this.settings_.isReady()) {
-    this.editor_.initFromSettings_();  // In case the settings are already loaded.
+    this.initFromSettings_();  // In case the settings are already loaded.
   } else {
     $(document).bind('settingsready', this.initFromSettings_.bind(this));
   }

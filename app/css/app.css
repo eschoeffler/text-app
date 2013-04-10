@@ -397,7 +397,6 @@ header.hide-controls #window-close {
 #editor {
   -webkit-box-flex: 1.0;
   position: relative;
-  font-size: 12pt;
 }
 
 

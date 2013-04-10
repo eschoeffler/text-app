@@ -4,9 +4,12 @@
 function Settings() {
   this.ready_ = false;
   this.settings_ = {};
-  for (var key in Settings.SETTINGS) {
-    this.settings_[key] = Settings.SETTINGS[key]['default'];
-  }
+  var defaultSettings = {};
+  $.each(Settings.SETTINGS, function(key, value) {
+    defaultSettings[key] = value['default'];
+  }.bind(this));
+  // TODO(eschoeffler): get settings from drive.
+  this.getSettingsCallback_(defaultSettings);
 }
 
 /**
@@ -22,7 +25,7 @@ Settings.SETTINGS = {
   'autosave': {'default': false, 'type': 'boolean', 'widget': 'checkbox'},
   // 'fontsize' currently is not shown in Settings tab, only changed with
   // Ctrl-+ / Ctrl--
-  'fontsize': {'default': 14, 'type': 'number', 'widget': null},
+  'fontsize': {'default': 18, 'type': 'number', 'widget': null},
   'linenumbers': {'default': true, 'type': 'boolean', 'widget': 'checkbox'},
   'margin': {'default': false, 'type': 'boolean', 'widget': 'checkbox'},
   'margincol': {'default': 80, 'type': 'integer', 'widget': 'number'},
@@ -57,7 +60,6 @@ Settings.prototype.getSettingsCallback_ = function(settings) {
   this.ready_ = true;
   for (var key in settings) {
     var value = settings[key];
-    key = key.substring(9);
     this.settings_[key] = value;
   }
   $.event.trigger('settingsready');

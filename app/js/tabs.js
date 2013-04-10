@@ -5,14 +5,16 @@
  * @param {EditSession} session Ace edit session.
  * @param {string=} opt_fileId The file ID associated with this tab, if
  *     this tab is showing context that is already saved to Drive.
+ * @param {drive.File} opt_fileId The file associated with this tab if it is
+ *     available.
  */
-function Tab(api, id, session, opt_fileId) {
+function Tab(api, id, session, opt_fileId, opt_file) {
   this.api_ = api;
   this.id_ = id;
   this.session_ = session;
   this.state_ = Tab.State.SAVED;
   this.fileId_ = opt_fileId;
-  this.file_ = null
+  this.file_ = opt_file
 };
 
 Tab.State = {
@@ -66,7 +68,7 @@ Tab.prototype.setFile = function(file, opt_ignoreContent) {
   this.file_ = file;
   if (nameChanged)
     $.event.trigger('tabrenamed', this);
-  if (this.file_['content'] && ! opt_ignoreContent) {
+  if (this.file_['content'] && !opt_ignoreContent) {
     this.session_.setValue(this.file_['content']);
     this.setState(Tab.State.SAVED);
   }
@@ -200,10 +202,11 @@ Tabs.prototype.getCurrentTab = function(id) {
   return this.currentTab_;
 };
 
-Tabs.prototype.newTab = function(opt_fileId) {
+Tabs.prototype.newTab = function(opt_fileId, opt_file) {
   var session = this.editor_.newSession();
 
-  var tab = new Tab(this.api_, this.nextTabId_++, session, opt_fileId);
+  var tab = new Tab(
+      this.api_, this.nextTabId_++, session, opt_fileId, opt_file);
   // TODO(eschoeffler): What about other settings?
   tab.setTabSize(this.settings_.get('tabsize'));
   this.tabs_.push(tab);
@@ -211,9 +214,13 @@ Tabs.prototype.newTab = function(opt_fileId) {
   this.showTab(tab.getId());
   if (opt_fileId) {
     Tabs.addFileId(opt_fileId);
-    this.api_.get(opt_fileId, function(file) {
-      tab.setFile(file);
-    }, true);
+    if (opt_file) {
+      tab.setFile(opt_file);
+    } else {
+      this.api_.get(opt_fileId, function(file) {
+        tab.setFile(file);
+      }, true);
+    }
   }
 };
 
@@ -252,7 +259,7 @@ Tabs.prototype.close = function(tabId) {
   var tab = this.tabs_[i];
 
   if (!tab.isSaved()) {
-    if (this.settings_.get('autosave') && tab.getEntry()) {
+    if (this.settings_.get('autosave') && tab.getFileId()) {
       this.save(tab, true /* close */);
     } else {
       this.dialogController_.setText(
@@ -327,6 +334,29 @@ Tabs.prototype.save = function(opt_tab, opt_close) {
       callback = this.closeTab_.bind(this, opt_tab);
   opt_tab.save(callback);
 };
+
+
+Tabs.prototype.saveAs = function(opt_tab) {
+  if (!opt_tab)
+    opt_tab = this.currentTab_;
+  if (opt_tab.getFileId()) {
+    // File already exists in Drive, make a copy
+    // TODO(eschoeffler): make a better prompt.
+    var title = window.prompt('Save file as');
+    var contents = opt_tab.getContents();
+    this.api_.insert(
+      function(file) {
+        file['content'] = contents;
+        this.newTab(file['id'], file);
+      }.bind(this),
+      title,
+      opt_tab.getFile()['mimeType'],
+      contents);
+  } else {
+    opt_tab.save();
+  }
+};
+
 
 /**
  * @return {Array.<Object>} Each element:
