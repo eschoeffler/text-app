@@ -57,9 +57,28 @@ $.historyApi = function() {
   this.useSearch_ = !!(window.history && history.pushState);
 };
 
-$.historyApi.prototype.getParams_ = function() {
+$.historyApi.prototype.init_ = function() {
+  var hashParams = this.getParams_(false);
+  var queryParams = this.getParams_(true);
+  if (this.useSearch_) {
+    $.each(hashParams, function(key, value) {
+      if (!queryParams[key]) {
+        this.param(key, value);
+      }
+    }.bind(this));
+    window.location.hash = '';
+  } else {
+    $.each(queryParams, function(key, value) {
+      if (!hashParams[key]) {
+        this.param(key, value);
+      }
+    }.bind(this));
+  }
+};
+
+$.historyApi.prototype.getParams_ = function(useSearch) {
   var params = {};
-  var queryString = this.useSearch_ ?
+  var queryString = useSearch ?
       window.location.search : window.location.hash;
   if (queryString) {
     // split up the query string and store in an object
@@ -73,25 +92,33 @@ $.historyApi.prototype.getParams_ = function() {
 };
 
 $.historyApi.prototype.param = function(key, opt_value) {
-  var params = this.getParams_();
-  if (opt_value != undefined) {
-    params[key] = opt_value ? opt_value : undefined;
-    if (this.useSearch_) {
-      var newUrl = window.location.pathname + '?' + this.toString_(params);
-      window.history.pushState({}, '', newUrl);
-    } else {
-      window.location.hash = this.toString_(params);
-    }
+  var params = this.getParams_(this.useSearch_);
+  if (typeof opt_value === 'undefined') {
+    return params[key];
   }
+  if (!opt_value) {
+    delete params[key];
+  } else {
+    params[key] = opt_value;
+  }
+	if (this.useSearch_) {
+		var newUrl = window.location.pathname + '?' + this.toString_(params);
+		window.history.pushState({}, '', newUrl);
+	} else {
+		window.location.hash = this.toString_(params);
+	}
   return params[key];
 };
 
 $.historyApi.prototype.toString_ = function(params) {
   var paramStrings = [];
   $.each(params, function(key, value) {
-    paramStrings.push(key + '=' + value);
+    if (key && value) {
+      paramStrings.push(key + '=' + value);
+    }
   });
   return paramStrings.join('&');
 };
 
 $.history = new $.historyApi();
+$.history.init_();

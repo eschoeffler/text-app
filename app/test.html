@@ -81,8 +81,6 @@ api.start();
 var displayedFile = null;
 updateFile = function(file, ignoreContent) {
   displayedFile = file;
-  var content = file['content'];
-  delete file['content'];
   if (file == null) {
 		$('#getId').val('');
     $.history.param('f', null);
@@ -90,6 +88,8 @@ updateFile = function(file, ignoreContent) {
 		$('#getOut').text('');
 		$('#content').val('');
   } else {
+    var content = file['content'];
+    delete file['content'];
 		$('#getId').val(file['id']);
     $.history.param('f', file['id']);
 		$('#title').val(file['title']);
@@ -105,6 +105,7 @@ initUi = function() {
     api.list(function(files) {
       var out = $('#listOut');
       out.empty();
+      files.items = files.items ? files.items : [];
       $.each(files.items, function(index, file) {
         var div = $(document.createElement('div'));
         div.addClass('listDiv');
@@ -127,8 +128,9 @@ initUi = function() {
 
   $('#delete').on('click', function() {
     var id = $('#getId').val();
-    api.delete(id, function() {
+    api.del(id, function() {
       updateFile(null);
+      $('#list').trigger('click');
     });
   });
 
@@ -136,16 +138,18 @@ initUi = function() {
     var id = $('#getId').val();
     var content = $('#content').val();
     var title = $('#title').val();
-    displayedFile['title'] = title;
     if (id) {
+      displayedFile['title'] = title;
       api.update(function(file) {
           updateFile(file, true);
+          $('#list').trigger('click');
         },
         displayedFile,
         content);
     } else {
       api.insert(function(file) {
           updateFile(file, true);
+          $('#list').trigger('click');
         },
         title,
         'text/plain',

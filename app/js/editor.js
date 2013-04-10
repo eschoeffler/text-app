@@ -81,7 +81,7 @@ Editor.EXTENSION_TO_MODE = {
     'sql': 'sql',
     'svg': 'svg',
     'tex': 'latex',
-    'txt': 'txt',
+    'txt': 'text',
     'textile': 'textile',
     'xhtml': 'html',
     'xml': 'xml',

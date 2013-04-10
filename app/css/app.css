@@ -132,6 +132,10 @@ body.sidebar-open #sidebar {
   content: " *";
 }
 
+#tabs-list li.saving .filename:after {
+  content: " -";
+}
+
 #tabs-list li .close {
   background-position: center center;
   background-repeat: no-repeat;
@@ -366,6 +370,10 @@ header.search-active #search-input {
   content: " *";
 }
 
+#title-filename.saving:after {
+  content: " -";
+}
+
 header.search-active #title-filename {
   margin-left: 190px;
 }
@@ -389,6 +397,7 @@ header.hide-controls #window-close {
 #editor {
   -webkit-box-flex: 1.0;
   position: relative;
+  font-size: 12pt;
 }
 
 

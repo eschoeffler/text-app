@@ -1,28 +1,39 @@
 /**
  * @constructor
+ * @param {drive.Api} api The API to use to save files.
  * @param {number} id
  * @param {EditSession} session Ace edit session.
- * @param {FileEntry} entry
+ * @param {string=} opt_fileId The file ID associated with this tab, if
+ *     this tab is showing context that is already saved to Drive.
  */
-function Tab(id, session, entry) {
+function Tab(api, id, session, opt_fileId) {
+  this.api_ = api;
   this.id_ = id;
   this.session_ = session;
-  this.entry_ = entry;
-  this.saved_ = true;
-  this.path_ = null;
-  if (this.entry_)
-    this.updatePath_();
+  this.state_ = Tab.State.SAVED;
+  this.fileId_ = opt_fileId;
+  this.file_ = null
 };
+
+Tab.State = {
+  SAVED: 'saved',
+  SAVING: 'saving',
+  UNSAVED: 'unsaved'
+};
+
+Tab.DEFAULT_MIMETYPE_ = 'text/plain';
 
 Tab.prototype.getId = function() {
   return this.id_;
 };
 
 Tab.prototype.getName = function() {
-  if (this.entry_) {
-    return this.entry_.name;
+  var defaultName = 'Untitled ' + this.id_;
+  if (this.fileId_) {
+    return this.file_ ? this.file_['title'] || defaultName : 'Loading...';
   } else {
-    return 'Untitled ' + this.id_;
+    // File isnt save to Drive yet and doesnt have a name.
+    return defaultName;
   }
 };
 
@@ -30,16 +41,15 @@ Tab.prototype.getName = function() {
  * @return {string?} Filename extension or null.
  */
 Tab.prototype.getExtension = function() {
-  if (!this.entry_)
+  if (!this.file_)
     return null;
+
+  if (this.file_['fileExtension']) {
+    return this.file_['fileExtension'];
+  }
 
   var match = /\.([^.\\\/]+)$/.exec(this.getName());
-
-  if (match) {
-    return match[1];
-  } else {
-    return null;
-  }
+  return match ? match[1] : null;
 };
 
 Tab.prototype.getSession = function() {
@@ -47,26 +57,31 @@ Tab.prototype.getSession = function() {
 };
 
 /**
- * @param {FileEntry} entry
+ * @param {File} file
  */
-Tab.prototype.setEntry = function(entry) {
-  var nameChanged = this.getName() != entry.name;
-  this.entry_ = entry;
+Tab.prototype.setFile = function(file, opt_ignoreContent) {
+  var nameChanged = this.getName() != file['title'];
+  this.fileId_ = file['id'];
+  Tabs.addFileId(this.fileId_);
+  this.file_ = file;
   if (nameChanged)
     $.event.trigger('tabrenamed', this);
-  this.updatePath_();
+  if (this.file_['content'] && ! opt_ignoreContent) {
+    this.session_.setValue(this.file_['content']);
+    this.setState(Tab.State.SAVED);
+  }
 };
 
-Tab.prototype.getEntry = function() {
-  return this.entry_;
+Tab.prototype.getFile = function() {
+  return this.file_;
 };
 
 Tab.prototype.getContents = function() {
   return this.session_.getValue();
 };
 
-Tab.prototype.getPath = function() {
-  return this.path_;
+Tab.prototype.getFileId = function() {
+  return this.fileId_;
 };
 
 /**
@@ -83,44 +98,63 @@ Tab.prototype.setWrapping = function(wrapLines) {
   this.session_.setUseWrapMode(wrapLines);
 };
 
-Tab.prototype.updatePath_ = function() {
-  chrome.fileSystem.getDisplayPath(this.entry_, function(path) {
-    this.path_ = path;
-  }.bind(this));
-};
-
 Tab.prototype.save = function(opt_callbackDone) {
-  util.writeFile(
-      this.entry_, this.session_.getValue(),
-      function() {
-        this.saved_ = true;
-        $.event.trigger('tabsave', this);
-        if (opt_callbackDone)
-          opt_callbackDone();
-      }.bind(this));
+  this.setState(Tab.State.SAVING);
+  if (this.fileId_) {
+   var callback = function(file) {
+      this.setState(Tab.State.SAVED);
+      if (opt_callbackDone) {
+        opt_callbackDone();
+      }
+    }.bind(this);
+    this.api_.update(callback, this.file_, this.session_.getValue());
+  } else {
+    // TODO(eschoeffler): better prompt
+    var title = window.prompt('Name this file before saving');
+    var mimeType = 'text/plain';
+    var callback = function(file) {
+      this.setFile(file, true);
+      this.setState(Tab.State.SAVED);
+      if (opt_callbackDone) {
+        opt_callbackDone();
+      }
+    }.bind(this);
+    this.api_.insert(
+        callback, title, Tab.DEFAULT_MIMETYPE_, this.session_.getValue());
+  }
 };
 
 Tab.prototype.isSaved = function() {
-  return this.saved_;
+  return this.state_ === Tab.State.SAVED;
+};
+
+Tab.prototype.getState = function() {
+  return this.state_;
+};
+
+Tab.prototype.setState = function(state) {
+  if (state != this.saved_) {
+    this.state_ = state;
+    $.event.trigger('tabchange', this);
+  }
 };
 
 Tab.prototype.changed = function() {
-  if (this.saved_) {
-    this.saved_ = false;
-    $.event.trigger('tabchange', this);
-  }
+  this.setState(Tab.State.UNSAVED);
 };
 
 
 /**
  * @constructor
  */
-function Tabs(editor, dialogController, settings) {
+function Tabs(api, editor, dialogController, settings) {
+  this.api_ = api;
   this.editor_ = editor;
   this.dialogController_ = dialogController;
   this.settings_ = settings;
   this.tabs_ = [];
   this.currentTab_ = null;
+  this.nextTabId_ = 0;
   $(document).bind('docchange', this.onDocChanged_.bind(this));
   $(document).bind('settingschange', this.onSettingsChanged_.bind(this));
 }
@@ -132,13 +166,26 @@ function Tabs(editor, dialogController, settings) {
  * in background page, so that it wasn't destroyed when the window is closed.
  */
 Tabs.chooseEntry = function(params, callback) {
-  chrome.fileSystem.chooseEntry(
-      params,
-      function(entry) {
-        chrome.runtime.getBackgroundPage(function(bg) {
-          bg.background.  copyFileEntry(entry, callback);
-        });
-      });
+  // TODO(eschoeffler): how is this used?
+};
+
+Tabs.addFileId = function(fileId) {
+  var filesString = $.history.param('f');
+  var files = filesString ? filesString.split(',') : [];
+  if ($.inArray(fileId, files) < 0 ) {
+    files.push(fileId);
+    $.history.param('f', files.join(','));
+  }
+};
+
+Tabs.removeFileId = function(fileId) {
+  var filesString = $.history.param('f');
+  var files = filesString ? filesString.split(',') : [];
+  var index = $.inArray(fileId, files);
+  if (index >=0) {
+    files.splice(index, 1);
+    $.history.param('f', files.join(','));
+  }
 };
 
 Tabs.prototype.getTabById = function(id) {
@@ -153,22 +200,21 @@ Tabs.prototype.getCurrentTab = function(id) {
   return this.currentTab_;
 };
 
-Tabs.prototype.newTab = function(opt_content, opt_entry) {
-  var id = 1;
-  while (this.getTabById(id)) {
-    id++;
-  }
+Tabs.prototype.newTab = function(opt_fileId) {
+  var session = this.editor_.newSession();
 
-  var session = this.editor_.newSession(opt_content);
-
-  var tab = new Tab(id, session, opt_entry || null);
+  var tab = new Tab(this.api_, this.nextTabId_++, session, opt_fileId);
+  // TODO(eschoeffler): What about other settings?
   tab.setTabSize(this.settings_.get('tabsize'));
-  var fileNameExtension = tab.getExtension();
-  if (fileNameExtension)
-    this.editor_.setMode(session, fileNameExtension);
   this.tabs_.push(tab);
   $.event.trigger('newtab', tab);
   this.showTab(tab.getId());
+  if (opt_fileId) {
+    Tabs.addFileId(opt_fileId);
+    this.api_.get(opt_fileId, function(file) {
+      tab.setFile(file);
+    }, true);
+  }
 };
 
 Tabs.prototype.nextTab = function() {
@@ -242,7 +288,8 @@ Tabs.prototype.closeTab_ = function(tab) {
     if (this.tabs_.length > 1) {
       this.nextTab();
     } else {
-      window.close();
+      // TODO(eschoeffler): handle closing last tab.
+      alert('handle closing last tab');
     }
   }
 
@@ -252,6 +299,9 @@ Tabs.prototype.closeTab_ = function(tab) {
   }
 
   this.tabs_.splice(i, 1);
+  if (tab.getFileId()) {
+    Tabs.removeFileId(tab.getFileId());
+  }
   $.event.trigger('tabclosed', tab);
 };
 
@@ -260,30 +310,22 @@ Tabs.prototype.closeCurrent = function() {
 };
 
 Tabs.prototype.openFile = function() {
-  Tabs.chooseEntry({'type': 'openWritableFile'}, this.openFileEntry.bind(this));
+  this.api_.pickFile('Open a text file',
+      ['text/plain'],
+      function(ids) {
+        $.each(ids, function(index, id) {
+          this.openFileId(id);
+        }.bind(this));
+      }.bind(this));
 };
 
 Tabs.prototype.save = function(opt_tab, opt_close) {
   if (!opt_tab)
     opt_tab = this.currentTab_;
-  if (opt_tab.getEntry()) {
-    var callback = null;
-    if (opt_close)
+  var callback = null;
+  if (opt_close)
       callback = this.closeTab_.bind(this, opt_tab);
-    opt_tab.save(callback);
-  } else {
-    this.saveAs(opt_tab, opt_close);
-  }
-};
-
-Tabs.prototype.saveAs = function(opt_tab, opt_close) {
-  if (!opt_tab)
-    opt_tab = this.currentTab_;
-  // TODO(eschoeffler): do a better prompt
-  var name = window.prompt('Enter a name for this file');
-  Tabs.chooseEntry(
-      {'type': 'saveFile'},
-      this.onSaveAsFileOpen_.bind(this, opt_tab, opt_close || false));
+  opt_tab.save(callback);
 };
 
 /**
@@ -292,7 +334,7 @@ Tabs.prototype.saveAs = function(opt_tab, opt_close) {
  */
 Tabs.prototype.getFilesToSave = function() {
   var toSave = [];
-
+  // TODO(eschoeffler): fix this
   for (i = 0; i < this.tabs_.length; i++) {
     if (!this.tabs_[i].isSaved() && this.tabs_[i].getEntry()) {
       toSave.push({'entry': this.tabs_[i].getEntry(),
@@ -303,45 +345,19 @@ Tabs.prototype.getFilesToSave = function() {
   return toSave;
 };
 
-Tabs.prototype.openFileEntry = function(entry) {
-  if (!entry) {
+Tabs.prototype.openFileId = function(fileId) {
+  if (!fileId) {
     return;
   }
 
-  var thisPath = chrome.fileSystem.getDisplayPath(entry, function(path) {
-    for (var i = 0; i < this.tabs_.length; i++) {
-      if (this.tabs_[i].getPath() === path) {
-        this.showTab(this.tabs_[i].getId());
-        return;
-      }
+  for (var i = 0; i < this.tabs_.length; i++) {
+    if (this.tabs_[i].getFileId() === fileId) {
+      this.showTab(this.tabs_[i].getId());
+      return;
     }
-
-    entry.file(this.readFileToNewTab_.bind(this, entry));
-  }.bind(this));
-};
-
-Tabs.prototype.readFileToNewTab_ = function(entry, file) {
-  var self = this;
-  var reader = new FileReader();
-  reader.onerror = util.handleFSError;
-  reader.onloadend = function(e) {
-    self.newTab(this.result, entry);
-    if (self.tabs_.length === 2 &&
-        !self.tabs_[0].getEntry() &&
-        self.tabs_[0].isSaved()) {
-      self.close(self.tabs_[0].getId());
-    }
-  };
-  reader.readAsText(file);
-}
-
-Tabs.prototype.onSaveAsFileOpen_ = function(tab, close, entry) {
-  if (!entry) {
-    return;
   }
 
-  tab.setEntry(entry);
-  this.save(tab, close);
+  this.newTab(fileId);
 };
 
 Tabs.prototype.onDocChanged_ = function(e, session) {

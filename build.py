@@ -1,4 +1,4 @@
-#!/usr/bin/python3
+#!/usr/local/bin/python3
 
 import json
 import os
@@ -73,7 +73,6 @@ FILES = [
   'lib/ace/src-min-noconflict/mode-yaml.js'
 ]
 
-MANIFEST = 'manifest.json'
 INDEX_HTML = 'index.html'
 TARGET_JS = 'js/all.js'
 TARGET_JS_INCLUDE = ('<script src="' + TARGET_JS + '" type="text/javascript">'
@@ -87,8 +86,6 @@ JQUERY_EXTERNS = ('http://closure-compiler.googlecode.com/'
 
 USE_LOCALIZED_NAME = False
 COMPILATION_LEVEL = 'SIMPLE_OPTIMIZATIONS'
-BACKGROUND_COMPILATION_LEVEL = 'ADVANCED_OPTIMIZATIONS'
-
 
 def delete(*paths):
   for path in paths:
@@ -117,19 +114,6 @@ def get_version():
   if match.group(2):
     version += '.' + match.group(2)
   return version
-
-
-def process_manifest(out_dir, version):
-  manifest = json.load(open(os.path.join(SOURCE_DIR, MANIFEST)))
-  if USE_LOCALIZED_NAME:
-    manifest['name'] = '__MSG_extName__'
-  else:
-    manifest['name'] = APP_NAME
-  manifest['version'] = version
-  background_js = manifest['app']['background']['scripts']
-  manifest['app']['background']['scripts'] = ['js/background.js']
-  json.dump(manifest, open(os.path.join(out_dir, MANIFEST), 'w'), indent=2)
-  return background_js
 
 
 def process_index(out_dir):
@@ -214,10 +198,6 @@ def main():
   delete(out_dir, archive_path)
   copy_files(SOURCE_DIR, out_dir, FILES)
 
-  background_js_files = process_manifest(out_dir, version)
-  compile_js(os.path.join(out_dir, 'js', 'background.js'),
-             background_js_files,
-             BACKGROUND_COMPILATION_LEVEL)
   js_files = process_index(out_dir)
   compile_js(os.path.join(out_dir, TARGET_JS),
              js_files,

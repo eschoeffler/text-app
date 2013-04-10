@@ -11,7 +11,6 @@ function MenuController(tabs) {
   $(document).bind('tabchange', this.onTabChange.bind(this));
   $(document).bind('tabclosed', this.onTabClosed.bind(this));
   $(document).bind('tabrenamed', this.onTabRenamed.bind(this));
-  $(document).bind('tabsave', this.onTabSave.bind(this));
   $(document).bind('switchtab', this.onSwitchTab.bind(this));
 }
 
@@ -31,15 +30,21 @@ MenuController.prototype.onTabRenamed = function(e, tab) {
 };
 
 MenuController.prototype.onTabChange = function(e, tab) {
-  $('#tab' + tab.getId()).addClass('unsaved');
+  var el = $('#tab' + tab.getId());
+  el.removeClass('saving');
+  el.removeClass('unsaved');
+  switch(tab.getState()) {
+    case Tab.State.UNSAVED:
+      el.addClass('unsaved');
+      break;
+    case Tab.State.SAVING:
+      el.addClass('saving');
+      break;
+  }
 };
 
 MenuController.prototype.onTabClosed = function(e, tab) {
   $('#tab' + tab.getId()).remove();
-};
-
-MenuController.prototype.onTabSave = function(e, tab) {
-  $('#tab' + tab.getId()).removeClass('unsaved');
 };
 
 MenuController.prototype.onSwitchTab = function(e, tab) {

@@ -10,7 +10,6 @@ function WindowController(editor) {
   $(document).bind('switchtab', this.onChangeTab_.bind(this));
   $(document).bind('tabrenamed', this.onChangeTab_.bind(this));
   $(document).bind('tabchange', this.onTabChange_.bind(this));
-  $(document).bind('tabsave', this.onTabChange_.bind(this));
 }
 
 WindowController.prototype.windowControlsVisible = function(show) {
@@ -55,9 +54,15 @@ WindowController.prototype.onChangeTab_ = function(e, tab) {
 };
 
 WindowController.prototype.onTabChange_ = function(e, tab) {
-  if (this.currentTab_.isSaved()) {
-    $('#title-filename').removeClass('unsaved');
-  } else {
-    $('#title-filename').addClass('unsaved');
+  var el = $('#title-filename');
+  el.removeClass('saving');
+  el.removeClass('unsaved');
+  switch(tab.getState()) {
+    case Tab.State.UNSAVED:
+      el.addClass('unsaved');
+      break;
+    case Tab.State.SAVING:
+      el.addClass('saving');
+      break;
   }
 };

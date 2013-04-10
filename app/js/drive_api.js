@@ -15,6 +15,7 @@ var drive = {};
 
 
 drive.Api = function(clientId, scopes, opt_userId) {
+  this.appId_ = clientId.split(',')[0];
   this.clientId_ = clientId;
   this.scopes_ = scopes;
   this.scopes_.push('openid'); // Scope used to identify the user.
@@ -24,7 +25,7 @@ drive.Api = function(clientId, scopes, opt_userId) {
 
 
 drive.Api.prototype.start = function() {
-  gapi.load('auth:client,drive-share', function() {
+  gapi.load('auth:client,drive-share,picker', function() {
     this.authorize();
   }.bind(this));
 };
@@ -118,8 +119,8 @@ drive.Api.prototype.getFileContent_ =
 
 drive.Api.prototype.createMultipartBody_ =
     function(boundary, metadata, content, opt_base64Encoded) { 
-  const delimiter = "\r\n--" + boundary + "\r\n";
-  const close_delim = "\r\n--" + boundary + "--";
+  var delimiter = "\r\n--" + boundary + "\r\n";
+  var close_delim = "\r\n--" + boundary + "--";
 
   return delimiter +
       'Content-Type: application/json\r\n\r\n' +
@@ -136,7 +137,8 @@ drive.Api.prototype.createMultipartBody_ =
 drive.Api.prototype.createRequest_ =
     function (requestData, metadata, opt_content, opt_base64Encoded) {
   if (opt_content) {
-    const boundary = '-------758123749817234989129';
+    var boundary = '-------758123749817234989129';
+    requestData['path'] = '/upload' + requestData['path'];;
     requestData['params'] = {'uploadType': 'multipart'};
     requestData['headers'] = {
         'Content-Type': 'multipart/mixed; boundary="' + boundary + '"'
@@ -144,7 +146,7 @@ drive.Api.prototype.createRequest_ =
     requestData['body'] = this.createMultipartBody_(
         boundary, metadata, opt_content, opt_base64Encoded);
   } else {
-    requestData['body'] = metadata;
+    requestData['body'] = JSON.stringify(metadata);
   }
   return gapi.client.request(requestData);
 };
@@ -156,8 +158,8 @@ drive.Api.prototype.insert =
     mimeType: mimeType
   }
   var requestData = {
-    'path': '/upload/drive/v2/files',
-    'method': 'POST',
+    'path': '/drive/v2/files',
+    'method': 'POST'
   }
   var request = this.createRequest_(
       requestData, metadata, opt_content, opt_base64Encoded);
@@ -168,18 +170,18 @@ drive.Api.prototype.insert =
 drive.Api.prototype.update =
     function(callback, metadata, opt_content, opt_base64Encoded) {
   var requestData = {
-    'path': '/upload/drive/v2/files/' + metadata['id'],
-    'method': 'PUT',
+    'path': '/drive/v2/files/' + metadata['id'],
+    'method': 'PUT'
   }
   var request = this.createRequest_(
       requestData, metadata, opt_content, opt_base64Encoded);
   this.execute_(request, callback);
 };
 
-drive.Api.prototype.delete =
+drive.Api.prototype.del =
     function(id, callback) {
   this.loadAndExecute_(function() {
-    return gapi.client.drive.files.delete({
+    return gapi.client.drive.files['delete']({
       'fileId' : id
     });
   }, callback);
@@ -192,4 +194,32 @@ drive.Api.prototype.handleXhrError_ = function(xhr) {
 
 drive.Api.prototype.handleError_ = function(code, message) {
   this.trigger('error', [code, message]);
+};
+
+drive.Api.prototype.pickFile = function(title, types, callback) {
+  var view = new google.picker.View(google.picker.ViewId.DOCS);
+  view.setMimeTypes(types.join(','));
+  var picker = new google.picker.PickerBuilder()
+       .setTitle(title)
+       .addView(view)
+       .setCallback(this.createPickerCallback(callback))
+       .setAppId(this.appId_)
+       .enableFeature(google.picker.Feature.MULTISELECT_ENABLED)
+       .build();
+  picker.setVisible(true);
+};
+
+drive.Api.prototype.createPickerCallback = function(callback) {
+  return function (data) {
+		if (data.action == google.picker.Action.PICKED && data.docs) {
+			$.each(data.docs, function(index, doc) {
+				var files = [];
+				if (!doc.driveSuccess) {
+					console.log('Error picking doc with id' + doc.id);
+				}
+				files.push(doc.id);
+				callback(files);
+			});
+		}
+  }
 };
