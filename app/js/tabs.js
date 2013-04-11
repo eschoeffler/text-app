@@ -343,15 +343,13 @@ Tabs.prototype.saveAs = function(opt_tab) {
     // File already exists in Drive, make a copy
     // TODO(eschoeffler): make a better prompt.
     var title = window.prompt('Save file as');
-    var contents = opt_tab.getContents();
     this.api_.insert(
       function(file) {
-        file['content'] = contents;
-        this.newTab(file['id'], file);
+        opt_tab.setFile(file, true);
       }.bind(this),
       title,
       opt_tab.getFile()['mimeType'],
-      contents);
+      opt_tab.getContents());
   } else {
     opt_tab.save();
   }
